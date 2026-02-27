@@ -39,6 +39,10 @@ export default async function startServe() {
   }
   console.log("文件目录:", rootDir);
 
+  // 提供前端静态文件
+  const webDir = path.join(process.cwd(), "scripts/web");
+  app.use(express.static(webDir));
+  
   app.use(express.static(rootDir));
 
   app.use(async (req, res, next) => {
