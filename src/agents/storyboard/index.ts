@@ -412,10 +412,10 @@ ${sections.join("\n\n")}
   });
 
   /**
-   * 执行分镜图生成的具体逻辑（异步并发）
+   * 执行分镜图生成的具体逻辑（异步并发，public 供 WebSocket 路由直接调用）
    * 每个分镜包含多个镜头，所有镜头的提示词合并生成一张宫格图，再分割为单张镜头图片
    */
-  async executeShotImageGeneration(shotIds: number[]): Promise<void> {
+  public async executeShotImageGeneration(shotIds: number[]): Promise<void> {
     await Promise.all(shotIds.map((shotId) => this.generateSingleShotImage(shotId)));
   }
 
@@ -513,7 +513,11 @@ ${sections.join("\n\n")}
   private async buildEnvironmentContext(): Promise<string> {
     const projectInfo = await u.db("t_project").where({ id: this.projectId }).first();
 
-    const row = await u.db("t_outline").where({ id: this.scriptId, projectId: this.projectId }).first();
+    // 先找对应剧本，再通过 outlineId 找大纲
+    const scriptData = await u.db("t_script").where({ id: this.scriptId, projectId: this.projectId }).first();
+    const row = scriptData?.outlineId
+      ? await u.db("t_outline").where({ id: scriptData.outlineId, projectId: this.projectId }).first()
+      : null;
     const outline: any | null = row?.data ? JSON.parse(row.data) : null;
 
     // 分类提取资源名称
@@ -645,10 +649,7 @@ ${task}
     }
 
     this.emit("subAgentEnd", { agent: agentType });
-    this.history.push({
-      role: "assistant",
-      content: fullResponse,
-    });
+    // 子 Agent 不写入主 history，避免 history 过大导致上下文超限卡死
     this.log(`Sub-Agent 完成`, agentType);
 
     return fullResponse ?? `${agentType}已完成任务`;

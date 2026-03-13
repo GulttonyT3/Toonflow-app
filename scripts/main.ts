@@ -1,12 +1,12 @@
 import { app, BrowserWindow } from "electron";
 import path from "path";
 import startServe, { closeServe } from "src/app";
-import { number } from "zod";
 
 // 默认端口配置
 const defaultPort = 60000;
+let currentPort: number = defaultPort;
 
-function createMainWindow(port: any): void {
+function createMainWindow(port: number): void {
   const win = new BrowserWindow({
     width: 900,
     height: 600,
@@ -34,12 +34,11 @@ function createMainWindow(port: any): void {
 }
 app.whenReady().then(async () => {
   try {
-    const port = await startServe(false);
-    createMainWindow(60000);
+    currentPort = await startServe(false);
+    createMainWindow(currentPort);
   } catch (err) {
     console.error("[服务启动失败]:", err);
-    // 如果服务启动失败，使用默认端口创建窗口
-    createMainWindow(defaultPort);
+    app.quit();
   }
 });
 
@@ -49,8 +48,7 @@ app.on("window-all-closed", () => {
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    // 重新激活时使用默认端口
-    createMainWindow(defaultPort);
+    createMainWindow(currentPort);
   }
 });
 

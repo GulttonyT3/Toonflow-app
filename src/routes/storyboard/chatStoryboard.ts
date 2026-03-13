@@ -136,14 +136,17 @@ router.ws("/", async (ws, req) => {
             .del();
           ws.send(JSON.stringify({ type: "notice", data: "历史记录已清空" }));
           break;
-        case "generateShotImage":
-          agent.history = [];
-          await u
-            .db("t_chatHistory")
-            .where({ projectId: Number(projectId) })
-            .del();
-          ws.send(JSON.stringify({ type: "notice", data: "历史记录已清空" }));
+        case "generateShotImage": {
+          // 直接调用分镜图生成（不需要再走 Agent，直接触发后台生成）
+          const shotIds: number[] = msg?.shotIds ?? [];
+          if (shotIds.length > 0) {
+            agent.executeShotImageGeneration(shotIds).catch((err) => {
+              ws.send(JSON.stringify({ type: "shotImageGenerateError", data: { shotIds, error: err.message } }));
+            });
+            ws.send(JSON.stringify({ type: "notice", data: `已开始为分镜 ${shotIds.join(", ")} 生成图片` }));
+          }
           break;
+        }
         case "replaceShot":
           agent.updatePreShots(msg.segmentId, msg.cellId, msg.cell);
           break;

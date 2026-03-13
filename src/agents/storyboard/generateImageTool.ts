@@ -280,14 +280,10 @@ export default async (cells: { prompt: string }[], scriptId: number, projectId: 
     })
     .filter((img) => img.filePath) as ImageInfo[];
 
-  if (allImages.length === 0) {
-    throw new Error("未找到可用的图片资源");
-  }
-
   const cellPrompts = cells.map((c) => c.prompt);
 
-  // 使用 AI 过滤相关资产
-  const filteredImages = await filterRelevantAssets(cellPrompts, resources, allImages);
+  // 过滤相关资产（无资产图片时跳过，直接用文字 prompt 生成）
+  const filteredImages = allImages.length > 0 ? await filterRelevantAssets(cellPrompts, resources, allImages) : [];
 
   const resourcesMapPrompts = buildResourcesMapPrompts(filteredImages);
   console.log("====润色前：", cellPrompts);
@@ -298,16 +294,10 @@ export default async (cells: { prompt: string }[], scriptId: number, projectId: 
     assetsName: resources,
   });
 
-  //   const prompts = `请生成${promptsData.gridLayout.totalCells}格,${promptsData.gridLayout.cols}列×${promptsData.gridLayout.rows}行宫格图。
-
-  // ${promptsData.prompt}
-
-  // 注意：请严格按照提示词内容生成图片，确保人物样貌、艺术风格、色调光影一致。
-  // `;
   const prompts = promptsData.prompt;
   console.log("====润色后：", prompts);
 
-  const processedImages = await processImages(filteredImages);
+  const processedImages = filteredImages.length > 0 ? await processImages(filteredImages) : [];
   const apiConfig = await u.getPromptAi("storyboardImage");
 
   const contentStr = await u.ai.image(

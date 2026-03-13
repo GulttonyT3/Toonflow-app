@@ -652,10 +652,7 @@ ${task}
     }
 
     this.emit("subAgentEnd", { agent: agentType });
-    this.history.push({
-      role: "assistant",
-      content: fullResponse,
-    });
+    // 子 Agent 不写入主 history，避免 history 过大导致上下文超限卡死
     this.log(`Sub-Agent 完成`, agentType);
 
     return fullResponse ?? `${agentType}已完成任务`;
@@ -697,40 +694,53 @@ ${task}
       content: msg,
     });
 
-    const envContext = await this.buildEnvironmentContext();
+    try {
+      const envContext = await this.buildEnvironmentContext();
 
-    const prompts = await u.db("t_prompts").where("code", "outlineScript-main").first();
-    const promptConfig = await u.getPromptAi("outlineScriptAgent");
+      const prompts = await u.db("t_prompts").where("code", "outlineScript-main").first();
+      const promptConfig = await u.getPromptAi("outlineScriptAgent");
 
-    const mainPrompts = prompts?.customValue || prompts?.defaultValue || "不论用户说什么，请直接输出Agent配置异常";
-
-    const { fullStream } = await u.ai.text.stream(
-      {
-        system: `${envContext}\n${mainPrompts}`,
-        tools: this.getAllTools(),
-        messages: this.history,
-        maxStep: 100,
-      },
-      promptConfig,
-    );
-
-    let fullResponse = "";
-    for await (const item of fullStream) {
-      if (item.type == "tool-call") {
-        this.emit("toolCall", { agent: "main", name: item.title, args: null });
+      if (!promptConfig || typeof (promptConfig as any).model === "undefined" || !(promptConfig as any).apiKey) {
+        const errMsg = "大纲助手未配置模型：请在「设置」中为「大纲故事线Agent」配置并选择语言模型。";
+        this.emit("error", errMsg);
+        this.emit("response", "");
+        return "";
       }
-      if (item.type == "text-delta") {
-        fullResponse += item.text;
-        this.emit("data", item.text);
+
+      const mainPrompts = prompts?.customValue || prompts?.defaultValue || "不论用户说什么，请直接输出Agent配置异常";
+
+      const { fullStream } = await u.ai.text.stream(
+        {
+          system: `${envContext}\n${mainPrompts}`,
+          tools: this.getAllTools(),
+          messages: this.history,
+          maxStep: 100,
+        },
+        promptConfig as any,
+      );
+
+      let fullResponse = "";
+      for await (const item of fullStream) {
+        if (item.type == "tool-call") {
+          this.emit("toolCall", { agent: "main", name: item.title, args: null });
+        }
+        if (item.type == "text-delta") {
+          fullResponse += item.text;
+          this.emit("data", item.text);
+        }
       }
+      this.history.push({
+        role: "assistant",
+        content: fullResponse,
+      });
+
+      this.emit("response", fullResponse);
+      return fullResponse;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.emit("error", message);
+      this.emit("response", "");
+      throw err;
     }
-    this.history.push({
-      role: "assistant",
-      content: fullResponse,
-    });
-
-    this.emit("response", fullResponse);
-
-    return fullResponse;
   }
 }
